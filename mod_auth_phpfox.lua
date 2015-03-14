@@ -119,7 +119,7 @@ function new_default_provider(host)
    function provider.test_password(username, password)
       local user = get_user(username)
 
-      return password and (md5(md5(password, true)..md5(string.sub(user.password_salt, 1, 3), true), true) == user.password)
+      return password and (md5(md5(password, true)..md5(string.sub(user.password_salt, 1, 3), true), true) == string.sub(user.password, 1, 32))
    end
 
    function provider.get_password(username)
