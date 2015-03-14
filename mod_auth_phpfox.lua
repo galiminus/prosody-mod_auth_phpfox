@@ -22,6 +22,9 @@ local hosts = hosts;
 local DBI = require "DBI";
 local md5 = require "util.hashes".md5;
 
+local rostermanager = require "core.rostermanager"
+local storagemanager = require "core.storagemanager";
+
 local prosody = _G.prosody;
 
 local connection;
@@ -83,6 +86,32 @@ local function get_user(username)
    end
 end
 
+local function get_user_from_id(id)
+   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_user` WHERE `user_id`=?", id);
+   if stmt then
+      for row in stmt:rows(true) do
+         return row;
+      end
+   end
+end
+
+local function get_friends(username)
+   log("debug", "%s %s", username, get_user(username).user_id)
+   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_friend` WHERE `user_id`=?", get_user(username).user_id);
+   if stmt then
+      local friends = {}; i = 1;
+      for row in stmt:rows(true) do
+         local friend = get_user_from_id(row.friend_user_id);
+         if friend then
+            log("debug", friend.user_name)
+            friends[i] = friend
+            i = i + 1
+         end
+      end
+      return friends
+   end
+end
+
 function new_default_provider(host)
    local provider = { name = "phpfox" };
    log("debug", "initializing default authentication provider for host '%s'", host);
@@ -134,6 +163,18 @@ function new_default_provider(host)
 
          if provider.test_password(username, password) then
             self.username = username
+
+            -- populate the Roster
+            roster = {}
+            for i, friend in pairs(get_friends(username)) do
+               roster[friend.user_name ..  '@' .. host] = {
+                  jid = friend.user_name ..  '@' .. host,
+                  subscription = "both",
+                  name = friend.full_name,
+                  groups = {}
+               }
+            end
+            rostermanager.save_roster(username, module.host, roster);
             return "success";
          end
          return "failure", "not-authorized", "Unable to authorize you with the authentication credentials you've sent.";
