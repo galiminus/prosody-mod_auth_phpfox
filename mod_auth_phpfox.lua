@@ -115,14 +115,30 @@ function new_default_provider(host)
    end
 
    function provider.get_sasl_handler()
-      local profile = {
-         plain = function(sasl, username, realm)
-            local user = get_user(username)
-            if not user then return "", nil; end
-            return user.password, true;
+      local sasl = {};
+      function sasl:clean_clone() return provider.get_sasl_handler(); end
+      function sasl:mechanisms() return { PLAIN = true; }; end
+      function sasl:select(mechanism)
+         if not self.selected and mechanism == "PLAIN" then
+            self.selected = mechanism;
+            return true;
          end
-      };
-      return new_sasl(module.host, profile);
+      end
+
+      function sasl:process(message)
+         if not message then return "failure", "malformed-request"; end
+         local username, password = message:match("^[^%z]*%z([^%z]+)%z([^%z]+)");
+
+         local user = get_user(username)
+         if not user then return "", nil; end
+
+         if provider.test_password(username, password) then
+            self.username = username
+            return "success";
+         end
+         return "failure", "not-authorized", "Unable to authorize you with the authentication credentials you've sent.";
+      end
+      return sasl;
    end
 
    return provider;
