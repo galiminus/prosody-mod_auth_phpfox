@@ -30,6 +30,8 @@ local prosody = _G.prosody;
 local connection;
 local params = module:get_option("auth_sql", module:get_option("phpfox"));
 
+if not params.exclude_view then params.exclude_view = -1; end
+
 local function test_connection()
    if not connection then return nil; end
    if connection:ping() then
@@ -102,8 +104,7 @@ local function get_friends(username)
       local friends = {}; i = 1;
       for row in stmt:rows(true) do
          local friend = get_user_from_id(row.friend_user_id);
-         if friend then
-            log("debug", friend.user_name)
+         if friend and friend.view_id ~= params.exclude_view then
             friends[i] = friend
             i = i + 1
          end
