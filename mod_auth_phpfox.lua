@@ -113,6 +113,44 @@ local function get_friends(username)
    end
 end
 
+local char = string.char
+
+local function tail(n, k)
+   local u, r=''
+   for i=1,k do
+      n,r = math.floor(n/0x40), n%0x40
+      u = char(r+0x80) .. u
+   end
+   return u, n
+end
+
+local function to_utf8(a)
+   local n, r, u = tonumber(a)
+   if n<0x80 then                        -- 1 byte
+      return char(n)
+   elseif n<0x800 then                   -- 2 byte
+      u, n = tail(n, 1)
+      return char(n+0xc0) .. u
+   elseif n<0x10000 then                 -- 3 byte
+      u, n = tail(n, 2)
+      return char(n+0xe0) .. u
+   elseif n<0x200000 then                -- 4 byte
+      u, n = tail(n, 3)
+      return char(n+0xf0) .. u
+   elseif n<0x4000000 then               -- 5 byte
+      u, n = tail(n, 4)
+      return char(n+0xf8) .. u
+   else                                  -- 6 byte
+      u, n = tail(n, 5)
+      return char(n+0xfc) .. u
+   end
+end
+
+function unescape_entities(str)
+   str = string.gsub(str, '&#(%d+);', to_utf8)
+   return str
+end
+
 function new_default_provider(host)
    local provider = { name = "phpfox" };
    log("debug", "initializing default authentication provider for host '%s'", host);
@@ -171,7 +209,7 @@ function new_default_provider(host)
                roster[friend.user_name ..  '@' .. host] = {
                   jid = friend.user_name ..  '@' .. host,
                   subscription = "both",
-                  name = friend.full_name,
+                  name = unescape_entities(friend.full_name),
                   groups = {}
                }
             end
