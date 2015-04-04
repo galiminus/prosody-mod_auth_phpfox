@@ -21,6 +21,7 @@ local nodeprep = require "util.encodings".stringprep.nodeprep;
 local hosts = hosts;
 local DBI = require "DBI";
 local md5 = require "util.hashes".md5;
+local sha1 = require "util.hashes".sha1;
 
 local rostermanager = require "core.rostermanager"
 local storagemanager = require "core.storagemanager";
@@ -97,9 +98,12 @@ local function get_user_from_id(id)
    end
 end
 
+local function get_user_by_name_or_id(id)
+   return get_user(id) or get_user_from_id(tonumber(id))
+end
+
 local function get_friends(username)
-   log("debug", "%s %s", username, get_user(username).user_id)
-   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_friend` WHERE `user_id`=?", get_user(username).user_id);
+   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_friend` WHERE `user_id`=?", get_user_by_name_or_id(username).user_id);
    if stmt then
       local friends = {}; i = 1;
       for row in stmt:rows(true) do
@@ -156,9 +160,24 @@ function new_default_provider(host)
    log("debug", "initializing default authentication provider for host '%s'", host);
 
    function provider.test_password(username, password)
-      local user = get_user(username)
+      local user = get_user_by_name_or_id(username)
+      local user_password = string.sub(user.password, 1, 32)
+      local user_salt = string.sub(user.password_salt, 1, 3)
 
-      return password and (md5(md5(password, true)..md5(string.sub(user.password_salt, 1, 3), true), true) == string.sub(user.password, 1, 32))
+      if not password then
+         return false
+      end
+
+      -- First auth mechanism: simple passwork check
+      if (md5(md5(password, true)..md5(user_salt, true), true) == user_password) then
+         return true
+      else
+         -- Second auth mechanism: check user_hash token
+         local seed = string.sub(password, 41, 10)
+         local password_hash = md5(md5(user_password, true) .. md5(user_salt, true), true) .. (params.custom_salt or "")
+         local token = sha1(seed .. md5(password_hash, true) .. seed, true) .. seed
+         return token == password
+      end
    end
 
    function provider.get_password(username)
@@ -170,8 +189,7 @@ function new_default_provider(host)
    end
 
    function provider.user_exists(username)
-      log("debug", "test user %s", username);
-      return get_user(username) and true;
+      return get_user_by_name_or_id(username) and true;
    end
 
    function provider.create_user(username, password)
@@ -197,7 +215,7 @@ function new_default_provider(host)
          if not message then return "failure", "malformed-request"; end
          local username, password = message:match("^[^%z]*%z([^%z]+)%z([^%z]+)");
 
-         local user = get_user(username)
+         local user = get_user_by_name_or_id(username)
          if not user then return "", nil; end
 
          if provider.test_password(username, password) then
@@ -225,3 +243,55 @@ function new_default_provider(host)
 end
 
 module:add_item("auth-provider", new_default_provider(module.host));
+
+-- Add an API path to get some kind of HMAC token
+
+-- function GET_token(event)
+--    local request, response = event.request, event.response;
+--    log("debug", request.headers.cookie)
+
+--    local headers = response.headers;
+--    headers.content_type = "application/json";
+
+--    local cookie = request.headers.cookie .. ";"
+--    local user_id = string.match(cookie, "user_id=([^;]+);")
+--    local user_hash = string.match(cookie, "user_hash=([^;]+);")
+--    log("debug", user_id)
+
+--    if not user_hash or not user_id then
+--       response:send([[{"error": "unauthorized"}]])
+--       return 403
+--    end
+
+--    local user = get_user_from_id(row.friend_user_id);
+--    if not user then
+--       response:send([[{"error": "unauthorized"}]])
+--       return 403
+--    end
+--    local password = string.sub(user.password, 1, 32)
+--    local salt = string.sub(user.password_salt, 1, 3)
+
+--    local password_hash = md5(md5(password, true) .. md5(salt, true), true) .. params.custom_salt
+
+--   local session_file = io.open(params.session_path .. "sess_" .. session)
+--   if not session_file then
+ --     response:send([[{"error": "unauthorized"}]])
+ --     return 403
+ --  end
+ --  session_content = session_file:read("*all")
+ --  session_file:close()
+
+--   response:send([[{"token": "123456789"}]])
+
+--   return 200;
+--end
+
+--	module:depends("http");
+--	module:provides("http", {
+--		default_path = "/token";
+--		route = {
+--			["GET"] = GET_token;
+--			["GET /"] = GET_token;
+--		};
+--	});
+
