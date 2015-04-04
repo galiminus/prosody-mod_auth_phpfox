@@ -213,12 +213,6 @@ function new_default_provider(host)
          end
       end
 
-      local function publish(session, node, id, item)
-         return module:fire_event("pep-publish-item", {
-                                     actor = true, session = session, node = node, id = id, item = item;
-                                                      });
-      end
-
       function sasl:process(message)
          if not message then return "failure", "malformed-request"; end
          local username, password = message:match("^[^%z]*%z([^%z]+)%z([^%z]+)");
@@ -262,7 +256,6 @@ local function handle_vcard(event)
    if stanza.attr.type == "get" then
       local vCard;
 
-      local image = "R0lGODlhDwAPAKECAAAAzMzM/////wAAACwAAAAADwAPAAACIISPeQHsrZ5ModrLlN48CXF8m2iQ3YmmKqVlRtW4MLwWACH+H09wdGltaXplZCBieSBVbGVhZCBTbWFydFNhdmVyIQAAOw=="
       local vCard = st.stanza("vCard", { xmlns = "vcard-temp" }):tag("VERSION"):text("3.0"):up();
 
       local node, host;
@@ -273,7 +266,7 @@ local function handle_vcard(event)
       end
 
       local user = get_user_by_name_or_id(node);
-      local avatar_path = string.format(params.avatar_path .. user.user_image, params.avatar_suffix);
+      local avatar_path = string.format(params.avatar_path .. "/" .. user.user_image, params.avatar_suffix);
 
       local formats = { ["gif"] = "image/gif", ["png"] = "image/png", ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg" };
       local format = string.sub(avatar_path, -3, -1);
