@@ -173,7 +173,7 @@ function new_default_provider(host)
          return true
       else
          -- Second auth mechanism: check user_hash token
-         local seed = string.sub(password, 41, 10)
+         local seed = string.sub(password, -10, -1)
          local password_hash = md5(md5(user_password, true) .. md5(user_salt, true), true) .. (params.custom_salt or "")
          local token = sha1(seed .. md5(password_hash, true) .. seed, true) .. seed
          return token == password
