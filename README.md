@@ -12,6 +12,15 @@ authentication = "phpfox"
 Configure the connection parameters to the PHPFox database:
 
 ```
-phpfox = { driver = "MySQL", database = "my_database", username = "root", password = "root", host = "localhost", prefix="mysite" }
+phpfox = {
+    driver = "MySQL",
+    database = "my_database",
+    username = "root",
+    password = "root",
+    host = "localhost",
+    prefix="mysite",
+    avatar_path="/avatar/path",
+    avatar_prefix="_200_square"
+}
 ```
 

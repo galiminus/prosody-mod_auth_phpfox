@@ -22,6 +22,8 @@ local hosts = hosts;
 local DBI = require "DBI";
 local md5 = require "util.hashes".md5;
 local sha1 = require "util.hashes".sha1;
+local base64 = require"util.encodings".base64;
+local io = require "io";
 
 local rostermanager = require "core.rostermanager"
 local storagemanager = require "core.storagemanager";
@@ -160,23 +162,23 @@ function new_default_provider(host)
    log("debug", "initializing default authentication provider for host '%s'", host);
 
    function provider.test_password(username, password)
-      local user = get_user_by_name_or_id(username)
-      local user_password = string.sub(user.password, 1, 32)
-      local user_salt = string.sub(user.password_salt, 1, 3)
+      local user = get_user_by_name_or_id(username);
+      local user_password = string.sub(user.password, 1, 32);
+      local user_salt = string.sub(user.password_salt, 1, 3);
 
       if not password then
-         return false
+         return false;
       end
 
       -- First auth mechanism: simple passwork check
       if (md5(md5(password, true)..md5(user_salt, true), true) == user_password) then
-         return true
+         return true;
       else
          -- Second auth mechanism: check user_hash token
-         local seed = string.sub(password, -10, -1)
-         local password_hash = md5(md5(user_password, true) .. md5(user_salt, true), true) .. (params.custom_salt or "")
-         local token = sha1(seed .. md5(password_hash, true) .. seed, true) .. seed
-         return token == password
+         local seed = string.sub(password, -10, -1);
+         local password_hash = md5(md5(user_password, true) .. md5(user_salt, true), true) .. (params.custom_salt or "");
+         local token = sha1(seed .. md5(password_hash, true) .. seed, true) .. seed;
+         return token == password;
       end
    end
 
@@ -209,6 +211,12 @@ function new_default_provider(host)
             self.selected = mechanism;
             return true;
          end
+      end
+
+      local function publish(session, node, id, item)
+         return module:fire_event("pep-publish-item", {
+                                     actor = true, session = session, node = node, id = id, item = item;
+                                                      });
       end
 
       function sasl:process(message)
@@ -244,54 +252,55 @@ end
 
 module:add_item("auth-provider", new_default_provider(module.host));
 
--- Add an API path to get some kind of HMAC token
+local st = require "util.stanza"
+local jid_split = require "util.jid".split;
 
--- function GET_token(event)
---    local request, response = event.request, event.response;
---    log("debug", request.headers.cookie)
+local function handle_vcard(event)
+   local session, stanza = event.origin, event.stanza;
+   local to = stanza.attr.to;
+   local from = stanza.attr.from;
+   if stanza.attr.type == "get" then
+      local vCard;
 
---    local headers = response.headers;
---    headers.content_type = "application/json";
+      local image = "R0lGODlhDwAPAKECAAAAzMzM/////wAAACwAAAAADwAPAAACIISPeQHsrZ5ModrLlN48CXF8m2iQ3YmmKqVlRtW4MLwWACH+H09wdGltaXplZCBieSBVbGVhZCBTbWFydFNhdmVyIQAAOw=="
+      local vCard = st.stanza("vCard", { xmlns = "vcard-temp" }):tag("VERSION"):text("3.0"):up();
 
---    local cookie = request.headers.cookie .. ";"
---    local user_id = string.match(cookie, "user_id=([^;]+);")
---    local user_hash = string.match(cookie, "user_hash=([^;]+);")
---    log("debug", user_id)
+      local node, host;
+      if to then
+         node, host = jid_split(to);
+      else
+         node, host = jid_split(from);
+      end
 
---    if not user_hash or not user_id then
---       response:send([[{"error": "unauthorized"}]])
---       return 403
---    end
+      local user = get_user_by_name_or_id(node);
+      local avatar_path = string.format(params.avatar_path .. user.user_image, params.avatar_suffix);
 
---    local user = get_user_from_id(row.friend_user_id);
---    if not user then
---       response:send([[{"error": "unauthorized"}]])
---       return 403
---    end
---    local password = string.sub(user.password, 1, 32)
---    local salt = string.sub(user.password_salt, 1, 3)
+      local formats = { ["gif"] = "image/gif", ["png"] = "image/png", ["jpg"] = "image/jpeg", ["jpeg"] = "image/jpeg" };
+      local format = string.sub(avatar_path, -3, -1);
 
---    local password_hash = md5(md5(password, true) .. md5(salt, true), true) .. params.custom_salt
+      local avatar_file = io.open(avatar_path, "rb")
+      if avatar_file then
+         local avatar_content = avatar_file:read("*all")
+         print(avatar_content);
+         avatar_file:close()
 
---   local session_file = io.open(params.session_path .. "sess_" .. session)
---   if not session_file then
- --     response:send([[{"error": "unauthorized"}]])
- --     return 403
- --  end
- --  session_content = session_file:read("*all")
- --  session_file:close()
+         vCard:tag("PHOTO")
+           :tag("BINVAL"):text(base64.encode(avatar_content)):up()
+           :tag("TYPE"):text(formats[format]):up()
+         :up();
+      end
 
---   response:send([[{"token": "123456789"}]])
+      if vCard then
+         session.send(st.reply(stanza):add_child(vCard)); -- send vCard!
+      else
+         session.send(st.error_reply(stanza, "cancel", "item-not-found"));
+      end
+   else
+      session.send(st.error_reply(stanza, "auth", "forbidden"));
+   end
+   return true;
+end
 
---   return 200;
---end
-
---	module:depends("http");
---	module:provides("http", {
---		default_path = "/token";
---		route = {
---			["GET"] = GET_token;
---			["GET /"] = GET_token;
---		};
---	});
-
+module:add_feature("vcard-temp");
+module:hook("iq/bare/vcard-temp:vCard", handle_vcard);
+module:hook("iq/host/vcard-temp:vCard", handle_vcard);
