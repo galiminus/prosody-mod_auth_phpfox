@@ -9,7 +9,7 @@ authentication = "phpfox"
 
 ```
 
-Configure the connection parameters to the PHPFox database:
+Configure the connection parameters to use the PHPFox database:
 
 ```
 phpfox = {
