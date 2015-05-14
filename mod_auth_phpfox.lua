@@ -83,7 +83,7 @@ local function getsql(sql, ...)
 end
 
 local function get_user(username)
-   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_user` WHERE `user_name`=?", username);
+   local stmt, err = getsql("SELECT * FROM `"..params.prefix.."_user` WHERE UPPER(`user_name`)=UPPER(?)", username);
    if stmt then
       for row in stmt:rows(true) do
          return row;
