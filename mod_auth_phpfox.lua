@@ -226,8 +226,8 @@ function new_default_provider(host)
             -- populate the Roster
             roster = {}
             for i, friend in pairs(get_friends(username)) do
-               roster[friend.user_name ..  '@' .. host] = {
-                  jid = friend.user_name ..  '@' .. host,
+               roster[string.lower(friend.user_name) ..  '@' .. host] = {
+                  jid = string.lower(friend.user_name) ..  '@' .. host,
                   subscription = "both",
                   name = unescape_entities(friend.full_name),
                   groups = {}
